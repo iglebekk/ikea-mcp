@@ -6264,7 +6264,7 @@
             "version": "dev-main",
             "source": {
                 "type": "git",
-                "url": "git@github.com:iglebekk/generelle-laravel-prinsipper.git",
+                "url": "https://github.com/iglebekk/generelle-laravel-prinsipper.git",
                 "reference": "9383bb673b778d06979a323885ffad73bfd959ff"
             },
             "dist": {
@@ -6322,7 +6322,11 @@
                 "laravel",
                 "principles"
             ],
-            "time": "2026-07-03T17:58:55+00:00"
+            "support": {
+                "source": "https://github.com/iglebekk/generelle-laravel-prinsipper/tree/main",
+                "issues": "https://github.com/iglebekk/generelle-laravel-prinsipper/issues"
+            },
+            "time": "2026-07-03T17:59:12+00:00"
         },
         {
             "name": "laravel/agent-detector",
@@ -8698,5 +8702,5 @@
         "php": "^8.4"
     },
     "platform-dev": {},
-    "plugin-api-version": "2.6.0"
+    "plugin-api-version": "2.9.0"
 }
