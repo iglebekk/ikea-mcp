@@ -49,7 +49,7 @@ Alle svar bruker en konsistent JSON-konvolutt med proveniens:
 
 ## Oppsett
 
-Krav: PHP 8.3+, Composer, SQLite (utvikling) eller MySQL/PostgreSQL (produksjon).
+Krav: PHP 8.4+, Composer, SQLite (utvikling) eller MySQL/PostgreSQL (produksjon).
 
 ```bash
 git clone git@github.com:iglebekk/ikea-mcp.git
