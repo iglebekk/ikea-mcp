@@ -518,6 +518,14 @@ return [
 
 ## 🛠️ Artisan Commands
 
+### Bruk alltid Artisan når kommandoen finnes (obligatorisk)
+
+- Bruk **alltid** `php artisan`-kommandoer for oppgaver som Laravel har en kommando for, når kommandoen er tilgjengelig.
+- Dette gjelder spesielt oppretting av nye filer: bruk `php artisan make:*` i stedet for å opprette controllers, models, migrations, requests, policies, tester osv. manuelt.
+- Artisan genererer riktig namespace, stub, plassering og boilerplate, og holder koden konsistent med Laravels konvensjoner og gjeldende versjon.
+- Sjekk `php artisan list` hvis du er usikker på om en passende kommando finnes.
+- Manuell oppretting er kun aktuelt når ingen Artisan-kommando dekker behovet.
+
 ### Opprett Nye Filer
 
 ```bash
@@ -742,6 +750,7 @@ class ShowProjectTool extends Tool
 14. **Ytelse** - Optimaliser database queries og unngå unødvendige operasjoner
 15. **Cache Strategisk** - Bruk caching for å forbedre ytelsen der det gir mening
 16. **Multi-Tenant Isolasjon** - Hent alltid data via tenant-relasjonen, aldri direkte på modellen
+17. **Bruk Artisan-kommandoer** - Bruk alltid `php artisan`-kommandoer når de finnes, f.eks. `make:*` for å opprette nye filer
 
 ## 🔗 Nyttige Ressurser
 

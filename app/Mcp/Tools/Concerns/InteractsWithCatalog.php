@@ -17,18 +17,39 @@ use Laravel\Mcp\Response;
 trait InteractsWithCatalog
 {
     /**
-     * Resolve and validate market/language from the request, with config defaults.
+     * Resolve and validate market/language from the request. When the caller
+     * omits them, the authenticated user's stored preference is used, so each
+     * user controls which IKEA they query. The environment is never consulted
+     * for an authenticated request.
      *
      * @return array{0: string, 1: string}
      */
     protected function marketLanguage(Request $request): array
     {
-        $market = strtolower($request->string('market', config('ikea.default_market'))->value());
-        $language = strtolower($request->string('language', config('ikea.default_language'))->value());
+        $market = strtolower($request->string('market', $this->defaultMarket($request))->value());
+        $language = strtolower($request->string('language', $this->defaultLanguage($request))->value());
 
         app(IkeaApi::class)->validateMarket($market, $language);
 
         return [$market, $language];
+    }
+
+    /**
+     * The default market for this request: the authenticated user's chosen
+     * market, or the config fallback for unauthenticated/CLI contexts.
+     */
+    protected function defaultMarket(Request $request): string
+    {
+        return $request->user()?->preferredMarket() ?? config('ikea.default_market');
+    }
+
+    /**
+     * The default language for this request: the authenticated user's chosen
+     * language, or the config fallback for unauthenticated/CLI contexts.
+     */
+    protected function defaultLanguage(Request $request): string
+    {
+        return $request->user()?->preferredLanguage() ?? config('ikea.default_language');
     }
 
     /**

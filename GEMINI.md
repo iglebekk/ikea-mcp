@@ -1,3 +1,5 @@
+
+
 <!-- LARAVEL-PRINSIPPER:START -->
 ## Generelle Laravel-prinsipper
 
