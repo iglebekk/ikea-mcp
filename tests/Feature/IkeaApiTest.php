@@ -71,6 +71,8 @@ class IkeaApiTest extends TestCase
         $this->assertSame(['white'], $result['products'][0]['colors']);
         $this->assertSame('10382', $result['products'][0]['category_path'][1]['id']);
         $this->assertSame(['90404097'], $result['products'][0]['variants']);
+
+        Http::assertSent(fn ($request) => ! str_contains($request->url(), 'offset='));
     }
 
     public function test_product_details_are_normalized(): void

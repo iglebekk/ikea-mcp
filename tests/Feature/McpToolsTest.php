@@ -215,7 +215,7 @@ class McpToolsTest extends TestCase
     {
         IkeaServer::tool(ListProductsByCategoryTool::class, ['category_id' => 'nope'])
             ->assertOk()
-            ->assertSee('not in the local catalog');
+            ->assertSee('not cached for market');
     }
 
     public function test_get_product_variants_includes_local_catalog_hits(): void

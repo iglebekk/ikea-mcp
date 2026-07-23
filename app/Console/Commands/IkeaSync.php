@@ -47,7 +47,7 @@ class IkeaSync extends Command
 
             if ($this->option('query') !== null) {
                 $observed = [...$observed, ...$this->importPages(
-                    fn (int $page) => $api->searchProducts($market, $language, (string) $this->option('query'), config('ikea.sync.page_size'), $page),
+                    fn (int $page) => $api->searchProducts($market, $language, (string) $this->option('query'), config('ikea.sync.page_size')),
                     $importer, $market, $language,
                 )];
             }

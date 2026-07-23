@@ -64,14 +64,13 @@ class IkeaApi
      *
      * @return array{products: array<int, array<string, mixed>>, total: int|null}
      */
-    public function searchProducts(string $market, string $language, string $query, int $size = 24, int $page = 1, ?string $categoryId = null): array
+    public function searchProducts(string $market, string $language, string $query, int $size = 24, ?string $categoryId = null): array
     {
         $json = $this->getJson($this->searchUrl($market, $language, [
             'types' => 'PRODUCT',
             'q' => $query,
             ...(filled($categoryId) ? ['category' => $categoryId] : []),
             'size' => $size,
-            'offset' => ($page - 1) * $size,
         ]));
 
         return $this->parseSearchResults($json);
@@ -88,7 +87,6 @@ class IkeaApi
             'types' => 'PRODUCT',
             'category' => $categoryId,
             'size' => $size,
-            'offset' => ($page - 1) * $size,
         ]));
 
         return $this->parseSearchResults($json);
@@ -204,7 +202,7 @@ class IkeaApi
 
         return [
             'products' => $products,
-            'total' => data_get($json, 'searchResultPage.products.main.totalCount'),
+            'total' => data_get($json, 'searchResultPage.products.main.totalCount', data_get($json, 'searchResultPage.products.main.max')),
         ];
     }
 

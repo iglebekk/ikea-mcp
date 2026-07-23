@@ -39,19 +39,16 @@ class SearchProductsTool extends Tool
             'min_price' => ['nullable', 'numeric', 'min:0'],
             'max_price' => ['nullable', 'numeric', 'min:0'],
             'include_discontinued' => ['nullable', 'boolean'],
-            'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:'.config('ikea.max_page_size')],
         ]);
 
         try {
-            $perPage = (int) data_get($validated, 'per_page', 10);
-            $page = (int) data_get($validated, 'page', 1);
+            $perPage = (int) data_get($validated, 'per_page', config('ikea.max_page_size'));
             $result = $this->api->searchProducts(
                 $market,
                 $language,
                 trim((string) data_get($validated, 'query', '')),
                 $perPage,
-                $page,
                 data_get($validated, 'category_id'),
             );
             $products = collect($result['products'])
@@ -66,12 +63,14 @@ class SearchProductsTool extends Tool
             return $this->envelope($market, $language, [
                 'data' => $products->all(),
                 'pagination' => [
-                    'page' => $page,
                     'per_page' => $perPage,
                     'total' => $total,
-                    'last_page' => $total === null ? null : (int) ceil($total / $perPage),
+                    'returned' => $products->count(),
                 ],
                 'source' => 'ikea_live',
+                'warnings' => $total !== null && $total > $products->count()
+                    ? ["IKEA returned {$products->count()} of {$total} matching products. Refine the search to narrow the result set."]
+                    : [],
             ]);
         } catch (IkeaException $e) {
             return $this->ikeaError($e);
@@ -132,8 +131,7 @@ class SearchProductsTool extends Tool
             'min_price' => $schema->number()->description('Minimum price in the market currency.'),
             'max_price' => $schema->number()->description('Maximum price in the market currency.'),
             'include_discontinued' => $schema->boolean()->description('Include products no longer active in the market. Default false.'),
-            'page' => $schema->integer()->min(1)->description('Page number, starting at 1.'),
-            'per_page' => $schema->integer()->min(1)->max((int) config('ikea.max_page_size'))->description('Results per page (default 10).'),
+            'per_page' => $schema->integer()->min(1)->max((int) config('ikea.max_page_size'))->description('Maximum products to return directly from IKEA (default 50).'),
         ];
     }
 }

@@ -45,7 +45,7 @@ class ListProductsByCategoryTool extends Tool
             if ($category === null) {
                 return [
                     'data' => [],
-                    'warnings' => ["Category {$validated['category_id']} is not in the local catalog for market {$market}. Use list_categories, or run ikea:sync."],
+                    'warnings' => ["Category {$validated['category_id']} is not cached for market {$market}. Use search_products with this category_id to query IKEA directly."],
                 ];
             }
 

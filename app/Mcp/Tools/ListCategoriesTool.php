@@ -14,7 +14,7 @@ use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[IsReadOnly]
-#[Description('List the IKEA category tree for a market and language from the local catalog.')]
+#[Description('List categories observed for individually cached IKEA products. This is not a complete live IKEA category tree; use search_products for product discovery.')]
 class ListCategoriesTool extends Tool
 {
     use InteractsWithCatalog;
@@ -46,7 +46,7 @@ class ListCategoriesTool extends Tool
                     'product_count' => $category->products_count,
                 ])->all(),
                 'warnings' => $categories->isEmpty() ? [
-                    "No categories synchronized for {$market}/{$language} yet. Run: php artisan ikea:sync --market={$market} --language={$language}.",
+                    "No categories are cached for {$market}/{$language}. This does not affect live product searches; use search_products to query IKEA directly.",
                 ] : [],
             ];
         });

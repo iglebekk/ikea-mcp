@@ -21,15 +21,18 @@ class IkeaServer extends Server
     protected string $version = '1.0.0';
 
     protected string $instructions = <<<'MARKDOWN'
-    Detailed product information for products sold on IKEA.com, served from a
-    local catalog database that is synchronized from IKEA in a controlled way.
+    Detailed product information for products sold on IKEA.com.
 
     All tools accept optional `market` (ISO country code, e.g. "us", "no", "de")
     and `language` parameters; use list_markets to discover valid combinations.
-    Search and listings read only from the local catalog. get_product fetches a
-    missing product from IKEA on demand; get_product_availability fetches fresh
-    stock data when the cached status is too old. Responses include provenance
-    (source, fetched_at, last_checked_at, from_cache, possibly_stale, warnings).
+    search_products always searches IKEA directly and does not cache results.
+    Use get_product for a specific item number; it uses the local cache when
+    available and otherwise fetches and stores that individual product from
+    IKEA. Category-listing tools only expose categories from individually
+    cached products, so use search_products for live product discovery.
+    get_product_availability fetches fresh stock data when the cached status is
+    too old. Responses include provenance (source, fetched_at,
+    last_checked_at, from_cache, possibly_stale, warnings).
 
     This is an unofficial integration and is not endorsed by IKEA.
     MARKDOWN;
