@@ -52,7 +52,7 @@ class McpToolsTest extends TestCase
             ->assertSee('"defaults"');
     }
 
-    public function test_search_finds_products_in_the_local_catalog_only(): void
+    public function test_search_always_queries_ikea_even_when_products_exist_locally(): void
     {
         $this->importBilly();
 
@@ -61,7 +61,7 @@ class McpToolsTest extends TestCase
             ->assertSee('"item_no":"00263850"')
             ->assertSee('"from_cache":false');
 
-        Http::assertSentCount(2);
+        Http::assertSentCount(3);
     }
 
     public function test_search_matches_item_numbers_and_series(): void
@@ -73,11 +73,19 @@ class McpToolsTest extends TestCase
             ->assertSee('"item_no":"00263850"');
     }
 
-    public function test_search_with_no_matches_warns_about_the_local_catalog(): void
+    public function test_search_fetches_from_ikea_without_importing_results(): void
     {
-        IkeaServer::tool(SearchProductsTool::class, ['query' => 'nonexistent'])
+        $this->fakeIkea();
+
+        IkeaServer::tool(SearchProductsTool::class, ['query' => 'billy', 'market' => 'no', 'language' => 'no'])
             ->assertOk()
-            ->assertSee('No products matched in the local catalog');
+            ->assertSee('"item_no":"00263850"')
+            ->assertSee('"source":"ikea_live"');
+
+        $this->assertDatabaseMissing('market_products', ['market' => 'no']);
+        $this->assertDatabaseMissing('product_translations', ['language' => 'no', 'name' => 'BILLY']);
+
+        Http::assertSentCount(1);
     }
 
     public function test_search_respects_price_filters_and_pagination(): void
@@ -86,35 +94,40 @@ class McpToolsTest extends TestCase
 
         IkeaServer::tool(SearchProductsTool::class, ['query' => 'billy', 'max_price' => 50])
             ->assertOk()
+            ->assertSee('"source":"ikea_live"')
             ->assertSee('"total":0');
 
         IkeaServer::tool(SearchProductsTool::class, ['query' => 'billy', 'min_price' => 50, 'per_page' => 1])
             ->assertOk()
-            ->assertSee('"total":1')
+            ->assertSee('"total":2')
             ->assertSee('"per_page":1');
     }
 
-    public function test_search_excludes_discontinued_products_by_default(): void
+    public function test_search_returns_live_ikea_results_regardless_of_local_product_status(): void
     {
         $product = $this->importBilly();
         $product->marketProducts()->update(['status' => 'discontinued']);
 
         IkeaServer::tool(SearchProductsTool::class, ['query' => 'billy'])
             ->assertOk()
-            ->assertSee('"total":0');
+            ->assertSee('"source":"ikea_live"')
+            ->assertSee('"total":2');
 
         IkeaServer::tool(SearchProductsTool::class, ['query' => 'billy', 'include_discontinued' => true])
             ->assertOk()
             ->assertSee('"item_no":"00263850"');
     }
 
-    public function test_search_is_market_isolated(): void
+    public function test_search_does_not_persist_products_for_an_empty_market(): void
     {
         $this->importBilly('us', 'en');
 
         IkeaServer::tool(SearchProductsTool::class, ['query' => 'billy', 'market' => 'no', 'language' => 'no'])
             ->assertOk()
-            ->assertSee('"total":0');
+            ->assertSee('"source":"ikea_live"')
+            ->assertSee('"total":2');
+
+        $this->assertDatabaseMissing('market_products', ['market' => 'no']);
     }
 
     public function test_invalid_market_returns_clean_error(): void

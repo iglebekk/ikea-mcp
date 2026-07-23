@@ -3,12 +3,11 @@
 namespace App\Mcp\Tools;
 
 use App\Exceptions\IkeaException;
-use App\Http\Resources\ProductSummaryResource;
 use App\Mcp\Tools\Concerns\InteractsWithCatalog;
-use App\Models\Product;
+use App\Services\IkeaApi;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\JsonSchema\Types\Type;
+use Illuminate\Support\Str;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -16,10 +15,12 @@ use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[IsReadOnly]
-#[Description('Search IKEA products in the local catalog by free text, with filters for category, price range, product type and status. Reads only from the local database; run ikea:sync or get_product to bring products in.')]
+#[Description('Search IKEA products directly at IKEA by free text, with optional category, price and product-type filters. Search results are never stored locally; use get_product to cache the complete details of one product by item number.')]
 class SearchProductsTool extends Tool
 {
     use InteractsWithCatalog;
+
+    public function __construct(public IkeaApi $api) {}
 
     protected string $name = 'search_products';
 
@@ -42,50 +43,79 @@ class SearchProductsTool extends Tool
             'per_page' => ['nullable', 'integer', 'min:1', 'max:'.config('ikea.max_page_size')],
         ]);
 
-        return $this->cached('search_products', $market, $language, $validated, 'search', function () use ($validated, $market, $language): array {
-            $term = trim((string) data_get($validated, 'query', ''));
+        try {
+            $perPage = (int) data_get($validated, 'per_page', 10);
+            $page = (int) data_get($validated, 'page', 1);
+            $result = $this->api->searchProducts(
+                $market,
+                $language,
+                trim((string) data_get($validated, 'query', '')),
+                $perPage,
+                $page,
+                data_get($validated, 'category_id'),
+            );
+            $products = collect($result['products'])
+                ->filter(fn (array $product): bool => $this->matchesFilters($product, $validated))
+                ->map(fn (array $product): array => $this->summary($product))
+                ->values();
+            $filtersApplied = filled(data_get($validated, 'product_type'))
+                || filled(data_get($validated, 'min_price'))
+                || filled(data_get($validated, 'max_price'));
+            $total = $filtersApplied ? $products->count() : $result['total'];
 
-            $results = Product::query()
-                ->forMarket($market, $language)
-                ->with('assets')
-                ->when($term !== '', fn (Builder $q) => $q->where(fn (Builder $group) => $group
-                    ->whereHas('translations', fn (Builder $t) => $t
-                        ->where('language', $language)
-                        ->where(fn (Builder $w) => $w
-                            ->whereLike('name', "%{$term}%")
-                            ->orWhereLike('type_name', "%{$term}%")
-                            ->orWhereLike('description', "%{$term}%")))
-                    ->orWhere('item_no', preg_replace('/\D/', '', $term) ?: $term)
-                    ->orWhereLike('series', "%{$term}%")))
-                ->when(data_get($validated, 'category_id'), fn (Builder $q, string $categoryId) => $q
-                    ->whereHas('categories', fn (Builder $c) => $c->where('ikea_id', $categoryId)->where('market', $market)))
-                ->when(data_get($validated, 'product_type'), fn (Builder $q, string $type) => $q
-                    ->whereLike('product_type', "%{$type}%"))
-                ->when(data_get($validated, 'min_price'), fn (Builder $q, $min) => $q
-                    ->whereHas('marketProducts', fn (Builder $m) => $m->where('market', $market)->where('price', '>=', $min)))
-                ->when(data_get($validated, 'max_price'), fn (Builder $q, $max) => $q
-                    ->whereHas('marketProducts', fn (Builder $m) => $m->where('market', $market)->where('price', '<=', $max)))
-                ->when(! data_get($validated, 'include_discontinued', false), fn (Builder $q) => $q
-                    ->whereHas('marketProducts', fn (Builder $m) => $m->where('market', $market)->where('status', 'active')))
-                ->orderBy('item_no')
-                ->paginate(
-                    perPage: (int) data_get($validated, 'per_page', 10),
-                    page: (int) data_get($validated, 'page', 1),
-                );
-
-            return [
-                'data' => ProductSummaryResource::collection($results->items())->resolve(),
+            return $this->envelope($market, $language, [
+                'data' => $products->all(),
                 'pagination' => [
-                    'page' => $results->currentPage(),
-                    'per_page' => $results->perPage(),
-                    'total' => $results->total(),
-                    'last_page' => $results->lastPage(),
+                    'page' => $page,
+                    'per_page' => $perPage,
+                    'total' => $total,
+                    'last_page' => $total === null ? null : (int) ceil($total / $perPage),
                 ],
-                'warnings' => $results->total() === 0 ? [
-                    'No products matched in the local catalog. The catalog only contains synchronized products; run ikea:sync for this market or look up a specific product with get_product.',
-                ] : [],
-            ];
-        });
+                'source' => 'ikea_live',
+            ]);
+        } catch (IkeaException $e) {
+            return $this->ikeaError($e);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $product
+     * @param  array<string, mixed>  $filters
+     */
+    private function matchesFilters(array $product, array $filters): bool
+    {
+        $type = data_get($filters, 'product_type');
+        $price = data_get($product, 'price');
+
+        return (! filled($type) || Str::contains(Str::lower((string) data_get($product, 'type_name')), Str::lower((string) $type)))
+            && (! filled(data_get($filters, 'min_price')) || $price >= data_get($filters, 'min_price'))
+            && (! filled(data_get($filters, 'max_price')) || $price <= data_get($filters, 'max_price'));
+    }
+
+    /**
+     * @param  array<string, mixed>  $product
+     * @return array<string, mixed>
+     */
+    private function summary(array $product): array
+    {
+        return [
+            'item_no' => $product['item_no'],
+            'name' => data_get($product, 'name'),
+            'type_name' => data_get($product, 'type_name'),
+            'description' => data_get($product, 'description'),
+            'series' => null,
+            'price' => data_get($product, 'price'),
+            'regular_price' => data_get($product, 'regular_price'),
+            'campaign_price' => null,
+            'currency' => data_get($product, 'currency'),
+            'status' => 'active',
+            'online_sellable' => data_get($product, 'online_sellable'),
+            'rating_value' => data_get($product, 'rating_value'),
+            'rating_count' => data_get($product, 'rating_count'),
+            'url' => data_get($product, 'url'),
+            'image_url' => data_get($product, 'image_url'),
+            'last_checked_at' => null,
+        ];
     }
 
     /**
