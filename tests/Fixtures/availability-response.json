@@ -1,0 +1,37 @@
+{
+    "availabilities": [
+        {
+            "itemKey": {"itemNo": "00263850", "type": "ART"},
+            "classUnitKey": {"classUnitCode": "US", "classUnitType": "RU"},
+            "availableForCashCarry": true,
+            "availableForClickCollect": true,
+            "buyingOption": {
+                "cashCarry": {
+                    "availability": {
+                        "quantity": 245,
+                        "probability": {"thisDay": {"messageType": "HIGH_IN_STOCK"}}
+                    }
+                },
+                "homeDelivery": {
+                    "availability": {
+                        "probability": {"thisDay": {"messageType": "HIGH_IN_STOCK"}}
+                    }
+                }
+            }
+        },
+        {
+            "itemKey": {"itemNo": "00263850", "type": "ART"},
+            "classUnitKey": {"classUnitCode": "088", "classUnitType": "STO"},
+            "availableForCashCarry": true,
+            "buyingOption": {
+                "cashCarry": {
+                    "availability": {
+                        "quantity": 12,
+                        "probability": {"thisDay": {"messageType": "LOW_IN_STOCK"}},
+                        "restocks": [{"earliestDate": "2026-08-01", "latestDate": "2026-08-05"}]
+                    }
+                }
+            }
+        }
+    ]
+}

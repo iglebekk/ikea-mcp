@@ -1,0 +1,20 @@
+[
+    {
+        "id": "088",
+        "name": "IKEA Brooklyn",
+        "buyOnline": true,
+        "address": {
+            "city": "Brooklyn",
+            "displayAddress": "1 Beard St, Brooklyn, NY 11231"
+        }
+    },
+    {
+        "id": "156",
+        "name": "IKEA Burbank",
+        "buyOnline": true,
+        "address": {
+            "city": "Burbank",
+            "displayAddress": "805 S San Fernando Blvd, Burbank, CA 91502"
+        }
+    }
+]
