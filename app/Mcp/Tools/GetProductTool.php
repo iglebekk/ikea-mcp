@@ -40,12 +40,31 @@ class GetProductTool extends Tool
             return $this->cached('get_product', $market, $language, ['item_no' => $itemNo], 'product', function () use ($itemNo, $market, $language): array {
                 $product = $this->find($itemNo, $market, $language);
                 $source = 'local_catalog';
+                $warnings = [];
 
                 if ($product === null) {
-                    $details = $this->api->productDetails($market, $language, $itemNo);
-                    $this->importer->importDetails($details, $market, $language);
-                    $product = $this->find($itemNo, $market, $language);
-                    $source = 'ikea_live';
+                    try {
+                        $details = $this->api->productDetails($market, $language, $itemNo);
+                        $this->importer->importDetails($details, $market, $language);
+                        $product = $this->find($itemNo, $market, $language);
+                        $source = 'ikea_live';
+                    } catch (IkeaException $e) {
+                        if ($e->reason !== IkeaException::BLOCKED) {
+                            throw $e;
+                        }
+
+                        // The PIP detail endpoint (www.ikea.com) is blocked, but the
+                        // search CDN is not — fall back to the search card for
+                        // partial data rather than failing the whole request.
+                        $product = $this->fallbackFromSearch($itemNo, $market, $language);
+
+                        if ($product === null) {
+                            throw $e;
+                        }
+
+                        $source = 'ikea_search_fallback';
+                        $warnings[] = 'Full product details are currently blocked by IKEA (HTTP 403); returning partial data from search results. Fields such as materials, measurements, care and documents may be missing. Use refresh_product to retry the full detail fetch later.';
+                    }
                 }
 
                 if ($product === null) {
@@ -58,19 +77,41 @@ class GetProductTool extends Tool
                 $lastChecked = $product->marketProducts->first()?->last_checked_at;
                 $staleAfter = now()->subDays(config('ikea.product_stale_after_days'));
 
+                if ($lastChecked !== null && $lastChecked->lt($staleAfter)) {
+                    $warnings[] = 'Product data has not been checked against IKEA recently. Use refresh_product for a forced re-check.';
+                }
+
                 return [
                     'data' => (new ProductDetailResource($product))->resolve(),
                     'source' => $source,
                     'last_checked_at' => $lastChecked?->toIso8601String(),
-                    'possibly_stale' => $lastChecked !== null && $lastChecked->lt($staleAfter),
-                    'warnings' => $lastChecked !== null && $lastChecked->lt($staleAfter)
-                        ? ['Product data has not been checked against IKEA recently. Use refresh_product for a forced re-check.']
-                        : [],
+                    'possibly_stale' => ($lastChecked !== null && $lastChecked->lt($staleAfter)) || $source === 'ikea_search_fallback',
+                    'warnings' => $warnings,
                 ];
             });
         } catch (IkeaException $e) {
             return $this->ikeaError($e);
         }
+    }
+
+    /**
+     * Look the item up through search_products (a different, unblocked host) and
+     * import the resulting card, giving partial product data when the PIP detail
+     * endpoint is blocked. Returns null when search does not surface the item.
+     */
+    private function fallbackFromSearch(string $itemNo, string $market, string $language): ?Product
+    {
+        $result = $this->api->searchProducts($market, $language, $itemNo, 10);
+
+        $card = collect($result['products'])->firstWhere('item_no', $itemNo);
+
+        if ($card === null) {
+            return null;
+        }
+
+        $this->importer->importCard($card, $market, $language);
+
+        return $this->find($itemNo, $market, $language);
     }
 
     private function find(string $itemNo, string $market, string $language): ?Product

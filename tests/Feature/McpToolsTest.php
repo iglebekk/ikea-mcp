@@ -163,6 +163,35 @@ class McpToolsTest extends TestCase
         $this->assertDatabaseHas('products', ['item_no' => '00263850']);
     }
 
+    public function test_get_product_falls_back_to_search_when_pip_is_blocked(): void
+    {
+        $this->fakeIkea([
+            'www.ikea.com/*/products/*' => Http::response('denied', 403),
+        ]);
+
+        IkeaServer::tool(GetProductTool::class, ['item_number' => '00263850'])
+            ->assertOk()
+            ->assertSee('"item_no":"00263850"')
+            ->assertSee('"name":"BILLY"')
+            ->assertSee('"source":"ikea_search_fallback"')
+            ->assertSee('"possibly_stale":true')
+            ->assertSee('blocked by IKEA');
+
+        $this->assertDatabaseHas('products', ['item_no' => '00263850']);
+    }
+
+    public function test_get_product_reports_blocked_when_search_fallback_finds_nothing(): void
+    {
+        $this->fakeIkea([
+            'www.ikea.com/*/products/*' => Http::response('denied', 403),
+        ]);
+
+        // The search fixture does not contain this item, so the fallback fails.
+        IkeaServer::tool(GetProductTool::class, ['item_number' => '11111111'])
+            ->assertHasErrors()
+            ->assertSee('blocked');
+    }
+
     public function test_get_product_for_unknown_item_reports_not_found(): void
     {
         Http::fake(['www.ikea.com/*' => Http::response(null, 404)]);
@@ -278,6 +307,34 @@ class McpToolsTest extends TestCase
             ->assertOk()
             ->assertSee('"possibly_stale":true')
             ->assertSee('last known stock status');
+    }
+
+    public function test_availability_returns_structured_error_when_blocked_without_cache(): void
+    {
+        $this->importBilly(fakes: [
+            'api.ingka.ikea.com/cia/availabilities/*' => Http::response('denied', 403),
+        ]);
+
+        IkeaServer::tool(GetProductAvailabilityTool::class, ['item_number' => '00263850'])
+            ->assertHasErrors()
+            ->assertSee('blocking automated stock lookups')
+            ->assertSee('get_product are unaffected');
+    }
+
+    public function test_availability_falls_back_to_stale_data_when_blocked(): void
+    {
+        $product = $this->importBilly(fakes: [
+            'api.ingka.ikea.com/cia/availabilities/*' => Http::response('denied', 403),
+        ]);
+        StockStatus::factory()->for($product)->create([
+            'checked_at' => now()->subHours(2),
+            'probability' => 'LOW_IN_STOCK',
+        ]);
+
+        IkeaServer::tool(GetProductAvailabilityTool::class, ['item_number' => '00263850'])
+            ->assertOk()
+            ->assertSee('"possibly_stale":true')
+            ->assertSee('blocking automated stock lookups');
     }
 
     public function test_availability_can_filter_on_store(): void

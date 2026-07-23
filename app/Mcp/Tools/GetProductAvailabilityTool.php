@@ -53,11 +53,17 @@ class GetProductAvailabilityTool extends Tool
                 try {
                     $statuses = $this->refreshFromIkea($product, $market, $language);
                 } catch (IkeaException $e) {
-                    if ($statuses->isEmpty() || ! $e->isTemporary()) {
-                        throw $e;
+                    $canFallBack = $statuses->isNotEmpty()
+                        && ($e->isTemporary() || $e->reason === IkeaException::BLOCKED);
+
+                    if (! $canFallBack) {
+                        throw $this->blockedStockError($e, $itemNo, $market);
                     }
+
                     $possiblyStale = true;
-                    $warnings[] = "IKEA could not be reached ({$e->reason}); returning the last known stock status.";
+                    $warnings[] = $e->reason === IkeaException::BLOCKED
+                        ? "IKEA is currently blocking automated stock lookups ({$e->reason}); returning the last known stock status."
+                        : "IKEA could not be reached ({$e->reason}); returning the last known stock status.";
                 }
             }
 
@@ -94,7 +100,7 @@ class GetProductAvailabilityTool extends Tool
      */
     private function refreshFromIkea(Product $product, string $market, string $language): Collection
     {
-        $entries = $this->api->availability($market, [$product->item_no]);
+        $entries = $this->api->availability($market, $language, [$product->item_no]);
         $stores = collect($this->storesFor($market, $language))->keyBy('id');
 
         $product->stockStatuses()->where('market', $market)->delete();
@@ -118,6 +124,23 @@ class GetProductAvailabilityTool extends Tool
         }
 
         return $product->stockStatuses()->where('market', $market)->get();
+    }
+
+    /**
+     * Turn an upstream failure with no local stock to fall back on into a clear,
+     * stock-specific error instead of a bare "HTTP 403" so callers know exactly
+     * what is blocked (and that product details are unaffected).
+     */
+    private function blockedStockError(IkeaException $exception, string $itemNo, string $market): IkeaException
+    {
+        if ($exception->reason !== IkeaException::BLOCKED) {
+            return $exception;
+        }
+
+        return new IkeaException(
+            IkeaException::BLOCKED,
+            "IKEA is currently blocking automated stock lookups for item {$itemNo} in market {$market} (HTTP 403), and no recent stock is cached. Product details from get_product are unaffected; try stock again later.",
+        );
     }
 
     /**
