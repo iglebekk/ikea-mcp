@@ -1,0 +1,63 @@
+{
+    "searchResultPage": {
+        "products": {
+            "main": {
+                "totalCount": 2,
+                "items": [
+                    {
+                        "product": {
+                            "itemNoGlobal": "00263850",
+                            "name": "BILLY",
+                            "typeName": "Bookcase",
+                            "itemMeasureReferenceText": "80x28x202 cm",
+                            "salesPrice": {
+                                "numeral": 89.99,
+                                "currencyCode": "USD",
+                                "previous": {"numeral": 99.99}
+                            },
+                            "pipUrl": "https://www.ikea.com/us/en/p/billy-bookcase-white-00263850/",
+                            "mainImageUrl": "https://www.ikea.com/us/en/images/products/billy-bookcase-white__0625599_pe692385_s5.jpg",
+                            "mainImageAlt": "BILLY Bookcase, white, 80x28x202 cm",
+                            "ratingValue": 4.5,
+                            "ratingCount": 1200,
+                            "onlineSellable": true,
+                            "lastChance": false,
+                            "colors": [{"name": "white"}],
+                            "categoryPath": [
+                                {"key": "bc001", "name": "Bookcases & shelving units"},
+                                {"key": "10382", "name": "Bookcases"}
+                            ],
+                            "gprDescription": {
+                                "variants": [
+                                    {"itemNoGlobal": "90404097"}
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        "product": {
+                            "itemNoGlobal": "90404097",
+                            "name": "BILLY",
+                            "typeName": "Bookcase",
+                            "itemMeasureReferenceText": "40x28x202 cm",
+                            "salesPrice": {
+                                "numeral": 59.99,
+                                "currencyCode": "USD"
+                            },
+                            "pipUrl": "https://www.ikea.com/us/en/p/billy-bookcase-black-brown-90404097/",
+                            "mainImageUrl": "https://www.ikea.com/us/en/images/products/billy-bookcase-black-brown__0644757_pe702939_s5.jpg",
+                            "ratingValue": 4.4,
+                            "ratingCount": 800,
+                            "onlineSellable": true,
+                            "colors": [{"name": "black-brown"}],
+                            "categoryPath": [
+                                {"key": "bc001", "name": "Bookcases & shelving units"},
+                                {"key": "10382", "name": "Bookcases"}
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    }
+}
