@@ -9,6 +9,7 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
@@ -71,7 +72,7 @@ class IkeaApi
             'q' => $query,
             ...(filled($categoryId) ? ['category' => $categoryId] : []),
             'size' => $size,
-        ]));
+        ]), $market, $language);
 
         return $this->parseSearchResults($json);
     }
@@ -87,7 +88,7 @@ class IkeaApi
             'types' => 'PRODUCT',
             'category' => $categoryId,
             'size' => $size,
-        ]));
+        ]), $market, $language);
 
         return $this->parseSearchResults($json);
     }
@@ -103,7 +104,7 @@ class IkeaApi
         $web = rtrim(config('ikea.hosts.web'), '/');
         $url = "{$web}/{$market}/{$language}/products/".substr($itemNo, -3)."/{$itemNo}.json";
 
-        $json = $this->getJson($url);
+        $json = $this->getJson($url, $market, $language);
 
         if (! is_array($json) || $json === []) {
             throw new IkeaException(IkeaException::SCHEMA_CHANGED, "IKEA product endpoint returned an unexpected response for item {$itemNo}.");
@@ -118,7 +119,7 @@ class IkeaApi
      * @param  array<int, string>  $itemNos
      * @return array<int, array<string, mixed>>
      */
-    public function availability(string $market, array $itemNos): array
+    public function availability(string $market, string $language, array $itemNos): array
     {
         $itemNos = array_map(self::normalizeItemNo(...), $itemNos);
         $host = rtrim(config('ikea.hosts.availability'), '/');
@@ -127,7 +128,7 @@ class IkeaApi
             'expand' => 'StoresList,Restocks,SalesLocations',
         ]);
 
-        $json = $this->getJson($url, ['X-Client-Id' => config('ikea.availability_client_id')]);
+        $json = $this->getJson($url, $market, $language, ['X-Client-Id' => config('ikea.availability_client_id')]);
 
         $entries = data_get($json, 'availabilities');
 
@@ -156,7 +157,7 @@ class IkeaApi
     public function stores(string $market, string $language): array
     {
         $web = rtrim(config('ikea.hosts.web'), '/');
-        $json = $this->getJson("{$web}/{$market}/{$language}/meta-data/navigation/stores-detailed.json");
+        $json = $this->getJson("{$web}/{$market}/{$language}/meta-data/navigation/stores-detailed.json", $market, $language);
 
         if (! is_array($json)) {
             throw new IkeaException(IkeaException::SCHEMA_CHANGED, 'IKEA stores endpoint returned an unexpected response format.');
@@ -298,11 +299,29 @@ class IkeaApi
 
     /**
      * Perform a rate-limited GET returning decoded JSON, mapping HTTP failures
-     * to the IkeaException taxonomy.
+     * to the IkeaException taxonomy. Headers are built per host/market so that
+     * bot-protected endpoints (www.ikea.com, api.ingka.ikea.com) receive the
+     * storefront context (Accept-Language, Referer, Origin) they require; the
+     * search CDN accepts requests without it, which is why search worked while
+     * product details and stock were rejected with HTTP 403.
+     *
+     * @param  array<string, string>  $extraHeaders
      */
-    private function getJson(string $url, array $headers = []): mixed
+    private function getJson(string $url, string $market, string $language, array $extraHeaders = []): mixed
     {
-        $this->throttle();
+        $this->throttle($this->scopeFor($url, $market));
+
+        $headers = $this->headersFor($url, $market, $language, $extraHeaders);
+
+        Log::debug('ikea.request', [
+            'method' => 'GET',
+            'host' => parse_url($url, PHP_URL_HOST),
+            'path' => parse_url($url, PHP_URL_PATH),
+            'market' => $market,
+            'language' => $language,
+            // Header names only — never values — so no client ids or cookies leak.
+            'headers' => array_keys($headers),
+        ]);
 
         try {
             $response = $this->client($headers)->get($url);
@@ -310,15 +329,66 @@ class IkeaApi
             throw new IkeaException(IkeaException::TEMPORARY, "Could not reach IKEA ({$e->getMessage()}).");
         }
 
+        Log::debug('ikea.response', [
+            'host' => parse_url($url, PHP_URL_HOST),
+            'market' => $market,
+            'status' => $response->status(),
+        ]);
+
         return $this->decode($response, $url);
+    }
+
+    /**
+     * Build the request headers for a given endpoint. www.ikea.com and the
+     * Ingka availability API sit behind bot protection that rejects requests
+     * lacking a storefront Accept-Language/Referer (and, cross-origin, Origin).
+     *
+     * @param  array<string, string>  $extra
+     * @return array<string, string>
+     */
+    private function headersFor(string $url, string $market, string $language, array $extra = []): array
+    {
+        $web = rtrim(config('ikea.hosts.web'), '/');
+
+        $headers = [
+            'User-Agent' => config('ikea.user_agent'),
+            'Accept' => 'application/json',
+            'Accept-Language' => $this->acceptLanguage($market, $language),
+            'Referer' => "{$web}/{$market}/".($language !== '' ? "{$language}/" : ''),
+        ];
+
+        if (parse_url($url, PHP_URL_HOST) === parse_url((string) config('ikea.hosts.availability'), PHP_URL_HOST)) {
+            $headers['Origin'] = $web;
+        }
+
+        return array_merge($headers, $extra);
+    }
+
+    /**
+     * Build a browser-like Accept-Language value, e.g. "no-NO,no;q=0.9,en;q=0.8".
+     * The English fallback is omitted when the language is already English so we
+     * never emit a duplicated "en" entry (e.g. "en-US,en;q=0.9").
+     */
+    private function acceptLanguage(string $market, string $language): string
+    {
+        $language = $language !== '' ? strtolower($language) : 'en';
+        $value = "{$language}-".strtoupper($market).",{$language};q=0.9";
+
+        return $language === 'en' ? $value : "{$value},en;q=0.8";
+    }
+
+    /**
+     * Rate-limit scope for a request: per host and market, so a burst or block
+     * on one endpoint/market never starves requests to another.
+     */
+    private function scopeFor(string $url, string $market): string
+    {
+        return parse_url($url, PHP_URL_HOST).':'.$market;
     }
 
     private function client(array $headers = []): PendingRequest
     {
-        return Http::withHeaders(array_merge([
-            'User-Agent' => config('ikea.user_agent'),
-            'Accept' => 'application/json',
-        ], $headers))
+        return Http::withHeaders($headers)
             ->timeout(config('ikea.timeout'))
             ->retry(
                 config('ikea.retries'),
@@ -329,10 +399,10 @@ class IkeaApi
             );
     }
 
-    private function throttle(): void
+    private function throttle(string $scope): void
     {
         $allowed = RateLimiter::attempt(
-            'ikea-upstream',
+            "ikea-upstream:{$scope}",
             config('ikea.requests_per_minute'),
             fn () => true,
         );

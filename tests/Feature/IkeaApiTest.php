@@ -91,6 +91,60 @@ class IkeaApiTest extends TestCase
         Http::assertSent(fn ($request) => str_contains($request->url(), '/us/en/products/850/00263850.json'));
     }
 
+    public function test_product_detail_requests_carry_storefront_headers(): void
+    {
+        $this->fakeIkea();
+
+        app(IkeaApi::class)->productDetails('no', 'no', '00263850');
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'www.ikea.com')
+            && $request->hasHeader('Accept-Language', 'no-NO,no;q=0.9,en;q=0.8')
+            && $request->hasHeader('Referer', 'https://www.ikea.com/no/no/'));
+    }
+
+    public function test_english_accept_language_has_no_duplicated_en_entry(): void
+    {
+        $this->fakeIkea();
+
+        app(IkeaApi::class)->productDetails('us', 'en', '00263850');
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'www.ikea.com')
+            && $request->hasHeader('Accept-Language', 'en-US,en;q=0.9'));
+    }
+
+    public function test_availability_requests_carry_origin_language_and_client_id(): void
+    {
+        $this->fakeIkea();
+
+        app(IkeaApi::class)->availability('no', 'no', ['00263850']);
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'api.ingka.ikea.com')
+            && $request->hasHeader('Origin', 'https://www.ikea.com')
+            && $request->hasHeader('Accept-Language', 'no-NO,no;q=0.9,en;q=0.8')
+            && $request->hasHeader('X-Client-Id'));
+    }
+
+    public function test_rate_limit_is_scoped_per_host_and_market(): void
+    {
+        config(['ikea.requests_per_minute' => 1]);
+        $this->fakeIkea();
+
+        // Different host+market scopes each get their own budget.
+        app(IkeaApi::class)->searchProducts('us', 'en', 'billy');
+        app(IkeaApi::class)->productDetails('us', 'en', '00263850');
+        app(IkeaApi::class)->searchProducts('no', 'no', 'billy');
+
+        Http::assertSentCount(3);
+
+        // A second search on the same host+market is limited.
+        try {
+            app(IkeaApi::class)->searchProducts('us', 'en', 'billy');
+            $this->fail('Expected IkeaException');
+        } catch (IkeaException $e) {
+            $this->assertSame(IkeaException::RATE_LIMITED, $e->reason);
+        }
+    }
+
     public function test_changed_response_format_is_detected(): void
     {
         Http::fake(['sik.search.blue.cdtapps.com/*' => Http::response(['totally' => 'different'])]);
