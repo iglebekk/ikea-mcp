@@ -318,7 +318,7 @@ class McpToolsTest extends TestCase
         IkeaServer::tool(GetProductAvailabilityTool::class, ['item_number' => '00263850'])
             ->assertHasErrors()
             ->assertSee('blocking automated stock lookups')
-            ->assertSee('get_product are unaffected');
+            ->assertSee('Product details from get_product are unaffected');
     }
 
     public function test_availability_falls_back_to_stale_data_when_blocked(): void

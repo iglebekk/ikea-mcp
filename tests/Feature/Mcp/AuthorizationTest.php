@@ -15,10 +15,11 @@ class AuthorizationTest extends TestCase
         parent::setUp();
 
         // The MCP endpoint is protected by the Passport (auth:api) guard, which
-        // needs encryption keys to resolve. Generate them if a fresh checkout
-        // (e.g. CI) has none, so this test stands on its own.
-        if (! file_exists(storage_path('oauth-private.key'))) {
-            Artisan::call('passport:keys', ['--no-interaction' => true]);
+        // needs both encryption keys to resolve. Regenerate them (forcing over
+        // any partial/corrupt pair) whenever either is missing, so this test
+        // stands on its own on a fresh checkout (e.g. CI).
+        if (! file_exists(storage_path('oauth-private.key')) || ! file_exists(storage_path('oauth-public.key'))) {
+            Artisan::call('passport:keys', ['--no-interaction' => true, '--force' => true]);
         }
     }
 

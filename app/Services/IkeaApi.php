@@ -366,13 +366,15 @@ class IkeaApi
 
     /**
      * Build a browser-like Accept-Language value, e.g. "no-NO,no;q=0.9,en;q=0.8".
+     * The English fallback is omitted when the language is already English so we
+     * never emit a duplicated "en" entry (e.g. "en-US,en;q=0.9").
      */
     private function acceptLanguage(string $market, string $language): string
     {
         $language = $language !== '' ? strtolower($language) : 'en';
-        $locale = "{$language}-".strtoupper($market);
+        $value = "{$language}-".strtoupper($market).",{$language};q=0.9";
 
-        return "{$locale},{$language};q=0.9,en;q=0.8";
+        return $language === 'en' ? $value : "{$value},en;q=0.8";
     }
 
     /**

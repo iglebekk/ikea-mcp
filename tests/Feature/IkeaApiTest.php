@@ -102,6 +102,16 @@ class IkeaApiTest extends TestCase
             && $request->hasHeader('Referer', 'https://www.ikea.com/no/no/'));
     }
 
+    public function test_english_accept_language_has_no_duplicated_en_entry(): void
+    {
+        $this->fakeIkea();
+
+        app(IkeaApi::class)->productDetails('us', 'en', '00263850');
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'www.ikea.com')
+            && $request->hasHeader('Accept-Language', 'en-US,en;q=0.9'));
+    }
+
     public function test_availability_requests_carry_origin_language_and_client_id(): void
     {
         $this->fakeIkea();
